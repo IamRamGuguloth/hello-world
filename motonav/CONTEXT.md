@@ -68,36 +68,80 @@ BLE UUIDs (custom, in `BleConstants.kt` / firmware `#define`s):
 
 - **Fully working:** `BleCentralManager.kt` (scan/connect/discover/write),
   the entire ESP32 firmware (`moto_nav_receiver.ino` — GATT server, line
-  parsing, Serial output). You can flash the firmware and test the BLE
-  leg today without touching Mapbox.
+  parsing, Serial output, **and GM009605 OLED rendering**). You can flash
+  the firmware and test the BLE leg today without touching Mapbox.
 - **Stubbed, TODO-gated:** `NavigationManager.kt` — the real Mapbox
   calls are written but commented out, pending a Mapbox access token.
   Structurally correct against the real SDK API (`RouteProgressObserver`,
   `BannerInstructionsObserver`, `MapboxNavigation`), just not compiled/tested.
+  `MainActivity` does call `navigationManager.start()` now (was previously
+  instantiated but never started — harmless while `start()` is a no-op
+  stub, but fixed so it's correct once the real implementation lands).
 - **Not built yet, by design (PoC scope):** foreground service, BLE
   auto-reconnect, PHY negotiation, destination search UI, runtime
   permission handling (API 31+ BLUETOOTH_SCAN/CONNECT).
+
+### Build infrastructure (added after the initial handoff)
+
+The zip handoff was missing pieces that would have made the Android app
+fail to build: no `res/` directory at all (the manifest referenced
+`@style/Theme.MotoNav` and `@mipmap/ic_launcher`, neither of which
+existed) and no Gradle wrapper. Both are fixed now:
+- `app/src/main/res/values/themes.xml` — minimal platform theme
+  (`android:Theme.Material.Light.NoActionBar` parent) since the app is
+  pure Compose with no AppCompat/Material Components dependency.
+- `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` + two vector
+  drawables — adaptive icon, no PNGs needed since minSdk 26 is exactly
+  the adaptive-icon floor.
+- `gradlew` / `gradlew.bat` / `gradle/wrapper/` — Gradle 8.6 wrapper,
+  compatible with AGP 8.3.0 + Kotlin 1.9.22 already pinned in the build
+  files.
+- `.github/workflows/motonav-android-build.yml` — builds a debug APK on
+  push/PR touching `motonav/**`, uploads it as a workflow artifact.
+  Not build-verified locally in the environment that added these files
+  (its network policy blocks `dl.google.com`, so the Android SDK
+  couldn't be fetched there) — first real signal is whatever this
+  workflow reports on GitHub.
+
+### GM009605 OLED (interim display, not the production choice)
+
+Added to let the phone -> BLE -> device pipeline be verified visually on
+the bench, ahead of the GC9A01/Sharp Memory LCD evaluation described
+below (which is still the actual production-path plan, unchanged). It's
+a 0.96" I2C SSD1306 module (128x64, monochrome), driven with
+Adafruit_SSD1306 + Adafruit_GFX. Pins are `OLED_SDA_PIN` / `OLED_SCL_PIN`
+at the top of the `.ino` (defaulted to GPIO8/GPIO9 for an ESP32-C3 Super
+Mini — verify against the actual board), I2C address 0x3C (0x3D on some
+units). If the display isn't detected at boot, the firmware logs a
+warning and keeps running BLE-only — the OLED is not load-bearing for
+the BLE leg.
 
 Package: `com.motonav.rider`. Android min SDK 26, compile SDK 34,
 Kotlin + Jetpack Compose (same stack as the BreatheBird app).
 
 ## Test plan, in order
 
-1. Flash ESP32 firmware, confirm it advertises as `MotoNav_0001`
-   (Serial Monitor, 115200 baud).
-2. Build the phone app, connect — confirm `Phone connected` on Serial.
+1. Flash ESP32 firmware (with the GM009605 OLED wired per above),
+   confirm it advertises as `MotoNav_0001` (Serial Monitor, 115200 baud,
+   and "Advertising..." on the OLED).
+2. Build the phone app, connect — confirm `Phone connected` on Serial
+   and on the OLED.
 3. Manually call `sendNavLine("NAV|TURN_LEFT|150|MG Road|4\n")` from a
    temporary button (before Mapbox is wired in) — proves the BLE leg
-   end to end without needing a real route.
+   end to end without needing a real route, and confirms the parsed
+   fields render correctly on the OLED, not just Serial.
 4. Get a Mapbox access token, uncomment `NavigationManager`'s real
    implementation, wire the Maven credentials block into
    `settings.gradle.kts` (per Mapbox's own setup docs — don't commit the
    secret token to git).
-5. Real test ride, watch Serial Monitor track live maneuvers.
-6. Only after step 5 is solid — bring in a display. Cheap GC9A01 round
-   TFT first (fast to wire, good for indoor dev), then a Sharp Memory
-   LCD breakout specifically to test outdoor sunlight readability, since
-   that's the single biggest open hardware risk.
+5. Real test ride, watch the OLED (and Serial Monitor) track live
+   maneuvers.
+6. Only after step 5 is solid — move to the actual display candidates.
+   Cheap GC9A01 round TFT first (fast to wire, good for indoor dev),
+   then a Sharp Memory LCD breakout specifically to test outdoor
+   sunlight readability, since that's the single biggest open hardware
+   risk. The GM009605 above is a bench-verification stand-in, not one of
+   these candidates.
 
 ## PoC hardware shopping list (already discussed, off-the-shelf only)
 

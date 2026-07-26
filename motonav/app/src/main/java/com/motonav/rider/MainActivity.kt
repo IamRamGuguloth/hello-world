@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
         navigationManager = NavigationManager(applicationContext) { navUpdate ->
             bleManager.sendNavLine(navUpdate.toWireLine())
         }
+        navigationManager.start()
 
         setContent {
             var connected by remember { mutableStateOf(false) }
