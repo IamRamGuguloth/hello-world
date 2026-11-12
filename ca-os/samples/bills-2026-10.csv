@@ -1,4 +1,0 @@
-Bill Date,Bill Number,Bill Status,Vendor Name,GST Treatment,GST Identification Number (GSTIN),Source of Supply,Item Name,HSN/SAC,Quantity,Item Total,Item Tax %,Total,ITC Eligibility
-2026-10-03,B-7781,Paid,Lens Rentals India,business_gst,29AACCL9012M1Z8,KA,Camera rental,997315,1,60000.00,18,70800.00,Eligible For ITC
-2026-10-09,B-2209,Open,CloudRender Technologies,business_gst,27AADCC3456P1Z1,MH,Render farm credits,998315,1,40000.00,18,47200.00,Eligible For ITC
-2026-10-15,B-0457,Paid,Hotel Residency,business_gst,29AAACH7890Q1Z6,KA,Team dinner,996331,1,8000.00,5,8400.00,Ineligible - As per Section 17(5)

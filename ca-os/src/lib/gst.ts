@@ -1,4 +1,4 @@
-// GST liability for a set of months, computed from the mirrored Zoho documents.
+// GST liability for a set of months, computed from the recorded documents.
 
 import { db } from "./db";
 

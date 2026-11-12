@@ -8,8 +8,8 @@ Portal behaviour described here (the Invoice Management System, auto-populated G
 
 | When | Step | Where |
 |---|---|---|
-| All month | 0. Raise invoices, record bills | Zoho Books |
-| 1st–5th | 1. Import · 2. Validate · 3. Classify | CA OS |
+| All month | 0. Raise invoices · 1. Record bills | CA OS |
+| 1st–5th | 2. Review and validate · 3. Classify | CA OS |
 | by 11th | 4. Generate GSTR-1 JSON, upload, file | CA OS → GST portal |
 | by 13th | 5. Review inward invoices in IMS | GST portal |
 | 14th | 6. Download GSTR-2B, reconcile | GST portal → CA OS |
@@ -19,17 +19,17 @@ Portal behaviour described here (the Invoice Management System, auto-populated G
 
 ## Step by step
 
-**0. Invoice in Zoho.** Tax correctness is decided here, not at filing. Every sales invoice needs: customer GSTIN (or deliberately none), place of supply, HSN/SAC on each line, the right rate, and an unbroken number series.
+**0. Raise the invoice.** Sales → *New invoice*. Tax correctness is decided here, not at filing, so the form refuses to save without a number, customer, place of supply, and an HSN/SAC and rate on every line. It derives intra-state or inter-state from the place of supply and splits the tax accordingly. Print the saved invoice to PDF and send it.
 
-**1. Import.** `npm run import:zoho` (CSV now, API in Step 2) writes `documents` and `document_lines` and an `import_runs` row with the file's hash. Drafts are skipped, void documents kept as void. Re-importing replaces a document, so Zoho remains the only place edits happen.
+**1. Record purchase bills as they arrive.** Purchases → *New bill*, copying the vendor's GSTIN and bill number exactly: they are the matching key against GSTR-2B later. Untick *Input credit can be claimed* for blocked items (meals, personal use), and tick *Reverse charge* where you owe the tax yourself, such as software bought from abroad.
 
-**2. Validate.** Nothing proceeds while a blocking check fails.
+**2. Review and validate at month end.** Page through the month in Sales and Purchases against your bank statement so nothing is missing. Nothing proceeds while a blocking check fails.
 
 | Check | Blocks filing? |
 |---|---|
 | GSTIN format and checksum | Yes |
 | Place of supply present; intra/inter split consistent with it | Yes |
-| Tax recomputed from taxable value × rate equals Zoho's total | Yes |
+| Tax is computed from taxable value × rate, never typed | Enforced on entry |
 | HSN/SAC present with the digit count your turnover requires | Yes |
 | Document date falls in the period | Yes |
 | Duplicate numbers; gaps in the invoice series (needed for the documents-issued table) | Review |
@@ -37,7 +37,7 @@ Portal behaviour described here (the Invoice Management System, auto-populated G
 | Export invoice: LUT on file for the year, or IGST charged | Yes |
 | Bill from a registered vendor with no GSTIN captured | Review (ITC lost otherwise) |
 
-The first three are implemented in the importer today; the rest are Step 2.
+Format checks on GSTIN, place of supply, HSN/SAC and duplicate numbers are enforced when a document is saved. GSTIN checksum, series gaps, credit-note linkage and the LUT check are Step 2.
 
 **3. Classify outward supplies into GSTR-1 tables.**
 
@@ -79,7 +79,7 @@ Guided steps the dashboard will show:
 4. File with DSC. An LLP must sign GST returns with a digital signature; EVC is not available to it.
 5. Record the ARN; save the filed PDF to the vault.
 
-A mistake found after filing but before GSTR-3B is corrected through **GSTR-1A** for the same period.
+Mark GSTR-1 filed on the dashboard and that month's sales documents lock. A mistake found after filing but before GSTR-3B is corrected through **GSTR-1A** for the same period, and in the books with a credit note.
 
 **5. Review inward invoices (IMS).** Suppliers' invoices appear in the Invoice Management System as they file. Accept what is yours, reject what is not, leave the doubtful pending. Anything untouched is treated as accepted when GSTR-2B is drawn up.
 
@@ -90,7 +90,7 @@ A mistake found after filing but before GSTR-3B is corrected through **GSTR-1A**
 | `matched` | In books and in 2B, tax equal within ₹1 | Claim |
 | `amount_mismatch` | Both sides, tax differs | Claim the lower; ask the vendor to amend |
 | in books, not in 2B | Vendor has not filed | **Do not claim.** Chase the vendor; it rolls into the month it appears |
-| `not_in_books` | In 2B only | A bill you forgot to enter (add in Zoho, re-import) or not yours (reject in IMS) |
+| `not_in_books` | In 2B only | A bill you forgot to enter (add it) or not yours (reject in IMS) |
 
 This table *is* the ITC mismatch check. The dashboard's "Input credit (books)" row is provisional until this step replaces it with the reconciled figure.
 
@@ -109,7 +109,7 @@ This table *is* the ITC mismatch check. The dashboard's "Input credit (books)" r
 | 4(B) Reversals · 4(D) Ineligible | Step 7 reversals and blocked credits |
 | 6.1 Payment of tax | Step 9 |
 
-If a pre-filled figure differs from yours, stop. Either the import is stale or GSTR-1 was wrong; fix the cause (re-import, or GSTR-1A) rather than typing over it.
+If a pre-filled figure differs from yours, stop. Either a document was added after GSTR-1 was built or GSTR-1 was wrong; fix the cause (GSTR-1A) rather than typing over it.
 
 **9. Set-off, pay, file.** `setOff()` applies opening credit plus this month's ITC in the statutory order (IGST credit first and fully; CGST and SGST credit never against each other) and returns cash due per head. Reverse-charge tax is always paid in cash. Then: create the challan on the portal for exactly those amounts → pay → confirm the Electronic Cash Ledger shows the balance → offset liability → file GSTR-3B with DSC → note the ARN.
 
@@ -117,7 +117,8 @@ If a pre-filled figure differs from yours, stop. Either the import is stale or G
 
 ## Controls that keep this safe without a CA reviewing it
 
-- **Three-way agreement** every month: Zoho's GST summary = CA OS = portal summary. Any two disagreeing blocks filing.
+- **Two-way agreement** every month: CA OS totals = portal summary, to the rupee. With no second accounting system to compare against, this check and the next carry more weight.
+- **Bank tie-out** every month: every receipt and vendor payment in the bank statement maps to a document here.
 - **Ledger tie-out** every month: computed closing credit = portal credit ledger.
-- **Turnover tie-out** every quarter: cumulative GSTR-1 turnover = Zoho sales ledger.
+- **Turnover tie-out** every quarter: cumulative GSTR-1 turnover = total invoiced here = receipts plus debtors.
 - **Parallel run** for the first two or three months: prepare everything here, and have your current CA file as usual. Switch over when your numbers and theirs match without explanation.

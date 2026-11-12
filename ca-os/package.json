@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
-    "import:zoho": "tsx scripts/import-zoho-csv.ts",
+    "import:csv": "tsx scripts/import-csv.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

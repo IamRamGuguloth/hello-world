@@ -3,10 +3,11 @@ import { test } from "node:test";
 import { fyStartYear, ymd } from "../src/lib/dates";
 import { monthsOfPeriod, setOff } from "../src/lib/gst";
 import { obligationsFor } from "../src/lib/rules";
+import { lineTax, supplyType } from "../src/lib/tax";
 import type { Entity } from "../src/lib/db";
 
 const entity: Entity = {
-  legal_name: "Test LLP", gstin: null, state_code: "29", gst_filing_frequency: "monthly",
+  legal_name: "Test LLP", gstin: null, state_code: "29", address: null, invoice_prefix: "INV-", gst_filing_frequency: "monthly",
   tax_audit_applicable: 0, deducts_tds: 1, tracking_from: "2026-04-01",
 };
 const due = (fy: number, code: string, label: string, e = entity) =>
@@ -81,4 +82,19 @@ test("set-off: IGST credit is exhausted before CGST/SGST credit is used", () => 
 test("set-off: CGST and SGST credit can pay IGST", () => {
   const r = setOff({ igst: 1000, cgst: 0, sgst: 0 }, { igst: 100, cgst: 300, sgst: 300 });
   assert.deepEqual(r.cash, { igst: 300, cgst: 0, sgst: 0 });
+});
+
+test("supply type: sales follow place of supply, purchases follow the vendor's state", () => {
+  assert.equal(supplyType(true, "registered", "29", "29"), "intra");
+  assert.equal(supplyType(true, "unregistered", "27", "29"), "inter");
+  assert.equal(supplyType(true, "overseas", null, "29"), "export");
+  assert.equal(supplyType(false, "overseas", null, "29"), "inter");
+  assert.equal(supplyType(true, "sez", "29", "29"), "sez");
+});
+
+test("line tax: intra-state splits evenly and never loses a paisa", () => {
+  assert.deepEqual(lineTax(25_000_000, 1800, "intra"), { igst: 0, cgst: 2_250_000, sgst: 2_250_000 });
+  assert.deepEqual(lineTax(25_000_000, 1800, "inter"), { igst: 4_500_000, cgst: 0, sgst: 0 });
+  const odd = lineTax(10_050, 500, "intra"); // tax 502.5 paise rounds to 503
+  assert.equal(odd.cgst + odd.sgst, 503);
 });

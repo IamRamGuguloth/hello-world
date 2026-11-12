@@ -10,16 +10,19 @@ const existing = getEntity();
 
 db()
   .prepare(
-    `INSERT INTO entity (id, legal_name, llpin, pan, tan, gstin, state_code, gst_filing_frequency,
+    `INSERT INTO entity (id, legal_name, llpin, pan, tan, gstin, state_code, address, invoice_prefix, gst_filing_frequency,
                          tax_audit_applicable, deducts_tds, tracking_from)
-     VALUES (1, @legal_name, @llpin, @pan, @tan, @gstin, @state_code, @gst_filing_frequency,
+     VALUES (1, @legal_name, @llpin, @pan, @tan, @gstin, @state_code, @address, @invoice_prefix, @gst_filing_frequency,
              @tax_audit_applicable, @deducts_tds, @tracking_from)
      ON CONFLICT (id) DO UPDATE SET legal_name = excluded.legal_name, llpin = excluded.llpin,
        pan = excluded.pan, tan = excluded.tan, gstin = excluded.gstin, state_code = excluded.state_code,
+       address = excluded.address, invoice_prefix = excluded.invoice_prefix,
        gst_filing_frequency = excluded.gst_filing_frequency,
        tax_audit_applicable = excluded.tax_audit_applicable, deducts_tds = excluded.deducts_tds`,
   )
   .run({
+    address: null,
+    invoice_prefix: "INV-",
     ...cfg,
     tax_audit_applicable: cfg.tax_audit_applicable ? 1 : 0,
     deducts_tds: cfg.deducts_tds ? 1 : 0,

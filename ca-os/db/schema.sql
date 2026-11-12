@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS entity (
   tan                   TEXT,
   gstin                 TEXT,
   state_code            TEXT NOT NULL,                        -- 2-digit GST state code, e.g. '36'
+  address               TEXT,                                 -- printed on tax invoices
+  invoice_prefix        TEXT NOT NULL DEFAULT 'INV-',
   gst_filing_frequency  TEXT NOT NULL DEFAULT 'monthly' CHECK (gst_filing_frequency IN ('monthly','qrmp')),
   tax_audit_applicable  INTEGER NOT NULL DEFAULT 0,           -- moves ITR due date, adds audit report
   deducts_tds           INTEGER NOT NULL DEFAULT 1,
@@ -27,19 +29,29 @@ CREATE TABLE IF NOT EXISTS entity (
   tracking_from         TEXT NOT NULL
 );
 
--- ───────────────────────── 2. Books (mirror of Zoho) ─────────────────────────
--- Zoho Books stays the system of record. These tables are a read-only mirror;
--- fix errors in Zoho and re-import, never edit here.
+-- ───────────────────────── 2. Books ─────────────────────────
+-- This database IS the system of record. Documents are entered in the app (or
+-- backfilled from CSV) and become read-only once the GST return for their
+-- period is filed; after that, corrections are made with a credit note.
 
 CREATE TABLE IF NOT EXISTS import_runs (
   id           INTEGER PRIMARY KEY,
-  source       TEXT NOT NULL CHECK (source IN ('zoho_csv','zoho_api','gstr2b_json')),
+  source       TEXT NOT NULL CHECK (source IN ('csv','gstr2b_json')),
   file_name    TEXT,
   file_sha256  TEXT,
   started_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   rows_read    INTEGER NOT NULL DEFAULT 0,
   docs_upserted INTEGER NOT NULL DEFAULT 0,
   errors_json  TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Customers and vendors, remembered so a document form can fill itself in.
+CREATE TABLE IF NOT EXISTS parties (
+  id          INTEGER PRIMARY KEY,
+  name        TEXT NOT NULL UNIQUE,
+  gstin       TEXT,
+  state_code  TEXT,
+  address     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -50,6 +62,8 @@ CREATE TABLE IF NOT EXISTS documents (
   period           TEXT NOT NULL,                             -- 'YYYY-MM' of doc_date
   party_name       TEXT NOT NULL,
   party_gstin      TEXT,                                      -- NULL = unregistered (B2C) / overseas
+  party_state      TEXT,                                      -- 2-digit code; snapshot at the time of the document
+  party_address    TEXT,
   place_of_supply  TEXT,                                      -- 2-digit state code; '96' = outside India
   supply_type      TEXT NOT NULL CHECK (supply_type IN ('intra','inter','export','sez')),
   reverse_charge   INTEGER NOT NULL DEFAULT 0,
@@ -60,8 +74,9 @@ CREATE TABLE IF NOT EXISTS documents (
   sgst_paise       INTEGER NOT NULL DEFAULT 0,
   cess_paise       INTEGER NOT NULL DEFAULT 0,
   total_paise      INTEGER NOT NULL,
-  zoho_id          TEXT,
-  import_run_id    INTEGER REFERENCES import_runs(id),
+  notes            TEXT,
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  import_run_id    INTEGER REFERENCES import_runs(id),         -- NULL = entered by hand
   UNIQUE (doc_type, number, party_name)
 );
 CREATE INDEX IF NOT EXISTS idx_documents_period ON documents (period, doc_type);

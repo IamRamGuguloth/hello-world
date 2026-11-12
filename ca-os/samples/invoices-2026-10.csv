@@ -1,6 +1,0 @@
-Invoice Date,Invoice Number,Invoice Status,Customer Name,GST Treatment,GST Identification Number (GSTIN),Place of Supply,Item Name,HSN/SAC,Quantity,Item Total,Item Tax %,Total
-2026-10-05,INV-0101,Sent,Acme Retail Pvt Ltd,business_gst,29AABCA1234F1Z5,KA,Brand film production,998361,1,250000.00,18,295000.00
-2026-10-12,INV-0102,Paid,Northwind Media LLP,business_gst,27AAEFN5678K1Z3,MH,Post-production,998361,1,180000.00,18,330400.00
-2026-10-12,INV-0102,Paid,Northwind Media LLP,business_gst,27AAEFN5678K1Z3,MH,Colour grading,998361,1,100000.00,18,330400.00
-2026-10-20,INV-0103,Sent,Globex Inc,overseas,,,Motion design retainer,998361,1,400000.00,0,400000.00
-2026-10-28,INV-0104,Draft,Acme Retail Pvt Ltd,business_gst,29AABCA1234F1Z5,KA,Storyboards,998361,1,50000.00,18,59000.00

@@ -1,0 +1,5 @@
+number,date,party,party_type,gstin,state,place_of_supply,description,hsn_sac,quantity,amount,gst_rate
+INV-0101,2026-10-05,Acme Retail Pvt Ltd,registered,29AABCA1234F1Z5,,,Brand film production,998361,1,250000.00,18
+INV-0102,2026-10-12,Northwind Media LLP,registered,27AAEFN5678K1Z3,,,Post-production,998361,1,180000.00,18
+INV-0102,2026-10-12,Northwind Media LLP,registered,27AAEFN5678K1Z3,,,Colour grading,998361,1,100000.00,18
+INV-0103,2026-10-20,Globex Inc,overseas,,,,Motion design retainer,998361,1,400000.00,0

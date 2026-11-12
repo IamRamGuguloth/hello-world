@@ -2,7 +2,7 @@
 
 ## What this system is, and where it stops
 
-A local dashboard that mirrors your books, computes what you owe, tracks every statutory date, produces the files the portals accept, and walks you through each manual upload. It never logs in to a government portal.
+A local application that holds your books, computes what you owe, tracks every statutory date, produces the files the portals accept, and walks you through each manual upload. It never logs in to a government portal.
 
 Three things it cannot replace. Plan for them rather than discovering them in October:
 
@@ -12,17 +12,11 @@ Three things it cannot replace. Plan for them rather than discovering them in Oc
 | **Tax audit** when turnover crosses the Income-tax Act threshold | The audit report can only be uploaded from a CA's login. |
 | **CA certificates** (e.g. Form 15CB for some foreign remittances, net-worth certificates) | Statutory certification. |
 
-If Streamline Studios is above the ₹40 lakh line you still need a CA once a year for the audit signature. The system then turns that from a retainer into a single, well-prepared engagement: you hand over reconciled books, filed returns and a complete vault.
+If Streamline Studios is above the ₹40 lakh line you still need a CA once a year for the audit signature. The system then turns that from a retainer into a single, well-prepared engagement: you hand over complete books, filed returns and a complete vault.
 
 ## Components
 
 ```
-                         ┌────────────────────────────┐
-                         │        Zoho Books          │   system of record for
-                         │  invoices · bills · bank   │   every transaction
-                         └──────┬──────────────┬──────┘
-                   CSV export   │              │  REST API (Step 2)
-                   (Step 1)     ▼              ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  YOUR MACHINE                                                         │
 │                                                                       │
@@ -30,33 +24,39 @@ If Streamline Studios is above the ₹40 lakh line you still need a CA once a ye
 │  │ TypeScript core          │        │ Python knowledge service    │  │
 │  │ (Next.js app + scripts)  │        │ (CLI jobs + 127.0.0.1 API)  │  │
 │  │                          │        │                             │  │
-│  │ · import & validate      │  HTTP  │ · poll feeds, fetch, chunk  │  │
-│  │ · GST computation        │ ─────► │ · embed, index              │  │
-│  │ · 2B reconciliation      │ /ask   │ · retrieve + answer with    │  │
-│  │ · GSTR-1 JSON builder    │        │   citations                 │  │
-│  │ · deadline rule engine   │        │ · flag rule changes         │  │
+│  │ · enter invoices & bills │  HTTP  │ · poll feeds, fetch, chunk  │  │
+│  │ · print tax invoices     │ ─────► │ · embed, index              │  │
+│  │ · validate, lock periods │ /ask   │ · retrieve + answer with    │  │
+│  │ · GST computation        │        │   citations                 │  │
+│  │ · 2B reconciliation      │        │ · flag rule changes         │  │
+│  │ · GSTR-1 JSON builder    │        │                             │  │
+│  │ · deadline rule engine   │        │                             │  │
 │  │ · dashboard, guided steps│        │                             │  │
 │  └────────────┬─────────────┘        └──────────────┬──────────────┘  │
 │               │      read / write                   │ writes kb_*     │
 │               ▼                                     ▼ only            │
 │        ┌─────────────────────────────────────────────────┐            │
-│        │ SQLite (WAL)  data/ca-os.db                     │            │
+│        │ SQLite (WAL)  data/ca-os.db  — THE BOOKS        │            │
 │        └─────────────────────────────────────────────────┘            │
 │        ┌─────────────────────────────────────────────────┐            │
 │        │ Vault  data/vault/  (files; indexed in SQLite)  │            │
 │        └─────────────────────────────────────────────────┘            │
 └───────────────────────────────┬───────────────────────────────────────┘
                                 │  you, by hand
-        JSON / worksheet up     ▼     GSTR-2B JSON, ARNs, challans down
-   ┌──────────────┬───────────────────────┬──────────────┐
-   │ gst.gov.in   │ incometax.gov.in      │ mca.gov.in   │
-   │              │ TRACES                │              │
-   └──────────────┴───────────────────────┴──────────────┘
+        JSON / worksheet up     ▼     GSTR-2B JSON, ARNs, challans,
+                                      bank statements down
+   ┌──────────────┬───────────────────────┬──────────────┬────────┐
+   │ gst.gov.in   │ incometax.gov.in      │ mca.gov.in   │ bank   │
+   │              │ TRACES                │              │        │
+   └──────────────┴───────────────────────┴──────────────┴────────┘
 ```
 
 ## Five decisions that shape everything else
 
-**1. Zoho stays the system of record; SQLite is a disposable mirror.** You never edit a transaction locally. A wrong invoice is fixed in Zoho and re-imported. That keeps one source of truth and means the local database can always be rebuilt. What is *not* disposable is what only this system knows: obligations and their acknowledgement numbers, the vault index, and the audit log.
+**1. This database is the system of record.** There is no accounting package behind it, so the SQLite file *is* your books. Three consequences:
+- **Backups are not optional.** Losing `data/` means losing statutory records. Set up the nightly encrypted backup before entering real data.
+- **Filed periods are locked.** Once GSTR-1 for a month is marked filed, that month's invoices cannot be edited or voided; purchases lock with GSTR-3B. The books then always agree with what the government holds, and corrections go through a credit note, as the law expects.
+- **Every change leaves a trace.** Creating, editing and voiding a document each write to the append-only `audit_log`.
 
 **2. All tax arithmetic is deterministic code in one language.** Import, validation, set-off, reconciliation and payload generation are TypeScript, sharing types with the UI and covered by tests. No LLM is anywhere in the path that produces a number you file.
 
@@ -71,8 +71,17 @@ If Streamline Studios is above the ₹40 lakh line you still need a CA once a ye
 ### GST engine
 Detailed in [02-gst-data-flow.md](02-gst-data-flow.md).
 
-- **Ingest.** Step 1 uses CSV exports. Step 2 adds the Zoho Books API: create a *Self Client* in the Zoho API console for the India data centre (`accounts.zoho.in` for OAuth, `www.zohoapis.in/books/v3` for data), scope `ZohoBooks.fullaccess.READ`, and keep the refresh token in the OS keychain, never in `.env`. Pull `invoices`, `creditnotes`, `bills`, `vendorcredits` filtered by date, then fetch each document for line items. Both paths write the same `documents` / `document_lines` rows.
-- **Worth knowing:** Zoho Books India can itself push GSTR-1 and show a GSTR-3B summary. Use that as an independent cross-check on your own numbers during the first few months, not as a reason to skip building: the value here is the validation, 2B reconciliation, calendar and trail around it.
+- **Entry.** Sales invoices, credit notes, purchase bills and vendor credits are entered in the app (`/documents`). The form works out intra-state versus inter-state, splits the tax, suggests the next invoice number and remembers each customer and vendor. A saved invoice has a print view that serves as the tax invoice you send.
+- **Backfill.** `npm run import:csv` loads history from a spreadsheet saved as CSV, through exactly the same validation as the form.
+
+### Bookkeeping beyond GST — the part still to build
+GST needs only invoices and bills. Income tax, Form 8 and TDS need full accounts: the LLP Act requires books on the double-entry system, and ITR-5 asks for a profit and loss account and balance sheet. With no accounting package, that has to live here too. It is the largest remaining piece and comes right after the GST flow:
+1. **Chart of accounts and journal** — a `ledger_accounts` table and a balanced `journal_entries` / `journal_lines` pair. Every invoice and bill posts a journal entry automatically (debtors / sales / output GST; expense / input GST / creditors).
+2. **Bank statement import** — CSV from your bank, each line matched to an invoice receipt, a bill payment, or categorised to an expense account. This is where salaries, rent, partner drawings and bank charges enter the books.
+3. **Reports** — trial balance, P&L, balance sheet, debtors and creditors ageing.
+4. **TDS register** — tax deducted on each vendor payment, feeding the quarterly statement.
+
+Until this exists, keep your current manual records for everything that is not a GST document.
 
 ### Compliance calendar
 `src/lib/rules.ts` holds one rule per statutory obligation as code; `obligations` holds one row per rule per period. Covered today: GSTR-1, GSTR-3B, PMT-06 (QRMP), GSTR-9, TDS deposit, TDS statements, Form 16A, advance tax, tax audit, ITR-5, LLP Form 11, Form 8 and DIR-3 KYC. Not covered, add if they apply to you: professional tax (state-specific), PF/ESI, the LUT renewal for exports (each March), and Form 3 / Form 4 event filings when the LLP agreement or partners change.
@@ -123,8 +132,9 @@ data/
 
 | Step | Outcome |
 |---|---|
-| **1 (this weekend)** | Schema, CSV import, liability computation, compliance calendar, dashboard. Built — see [03-step-1-plan.md](03-step-1-plan.md). |
-| 2 | Zoho API sync. GSTR-2B JSON import and reconciliation. GSTR-1 JSON builder. Guided filing checklists. |
-| 3 | Vault UI: drop a file on an obligation, hash it, link it. DSC and LUT expiry in the calendar. |
-| 4 | Python knowledge service and the ask box. |
-| 5 | TDS working (deductee-wise register from Zoho bills), advance-tax estimator, year-end pack for Form 8 / ITR-5. |
+| **1 (this weekend)** | Schema, invoice and bill entry, tax invoice print view, liability computation, compliance calendar, dashboard. Built — see [03-step-1-plan.md](03-step-1-plan.md). |
+| 2 | GSTR-2B JSON import and reconciliation. GSTR-1 JSON builder. Guided filing checklists. |
+| 3 | Double-entry ledger, bank statement import, P&L and balance sheet. |
+| 4 | Vault UI: drop a file on an obligation, hash it, link it. DSC and LUT expiry in the calendar. |
+| 5 | TDS register, advance-tax estimator, year-end pack for Form 8 / ITR-5. |
+| 6 | Python knowledge service and the ask box. |

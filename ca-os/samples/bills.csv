@@ -1,0 +1,4 @@
+number,date,party,party_type,gstin,state,description,hsn_sac,quantity,amount,gst_rate,reverse_charge,itc_eligible
+B-7781,2026-10-03,Lens Rentals India,registered,29AACCL9012M1Z8,,Camera rental,997315,1,60000.00,18,no,yes
+B-2209,2026-10-09,CloudRender Technologies,registered,27AADCC3456P1Z1,,Render farm credits,998315,1,40000.00,18,no,yes
+B-0457,2026-10-15,Hotel Residency,registered,29AAACH7890Q1Z6,,Team dinner,996331,1,8000.00,5,no,no

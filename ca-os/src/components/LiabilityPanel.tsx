@@ -29,7 +29,7 @@ export function LiabilityPanel({ period, liability }: { period: string; liabilit
       <p className="mt-2 text-4xl font-medium tracking-tight">{formatINR(l.cashPayable)}</p>
       <p className="mt-1 text-muted">
         {l.documentCount === 0
-          ? "No documents imported for this period yet."
+          ? "Nothing recorded for this period yet."
           : `to pay in cash, from ${l.documentCount} documents. Provisional until matched with GSTR-2B.`}
       </p>
 

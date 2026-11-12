@@ -28,6 +28,8 @@ export type Entity = {
   legal_name: string;
   gstin: string | null;
   state_code: string;
+  address: string | null;
+  invoice_prefix: string;
   gst_filing_frequency: "monthly" | "qrmp";
   tax_audit_applicable: number;
   deducts_tds: number;
